@@ -244,7 +244,7 @@ table tr:last-child td{border-bottom:none}
       <button class="tab on" onclick="goPage('lookup')" id="tabLookup">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Tra cứu
       </button>
-      <button class="tab" onclick="goPage('admin')" id="tabAdmin">
+      <button class="tab" onclick="goPage('admin')" id="tabAdmin" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Quản trị
       </button>
     </div>
@@ -1783,7 +1783,16 @@ async function initApp() {
       renderAdmin();
   }
 }
-
+// ============================================================
+// SECRET SHORTCUT (Ctrl + Shift + Q để mở Quản trị)
+// ============================================================
+document.addEventListener('keydown', function(e) {
+  // Kiểm tra xem người dùng có đang bấm đồng thời Ctrl + Shift + phím Q không
+  if (e.ctrlKey && e.shiftKey && (e.key === 'q' || e.key === 'Q')) {
+    e.preventDefault(); // Ngăn chặn hành vi mặc định của trình duyệt
+    goPage('admin');    // Mở trang quản trị
+  }
+});
 // Gọi hàm khởi chạy
 initApp();
 </script>
