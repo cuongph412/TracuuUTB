@@ -301,7 +301,7 @@ table tr:last-child td{border-bottom:none}
     <div class="fg" style="text-align:left"><label>Mật khẩu</label><input type="password" id="lp" placeholder="••••••"></div>
     <div class="alert alert-err" id="loginErr">Sai tên đăng nhập hoặc mật khẩu!</div>
     <button class="btn btn-navy btn-full" style="margin-top:4px" onclick="doLogin()">Đăng nhập</button>
-    <p style="font-size:11px;color:var(--g400);margin-top:11px">Mặc định: admin / admin123</p>
+    <p style="font-size:11px;color:var(--g400);margin-top:11px">Chỉ dành cho cán bộ phòng Đào tạo</p>
   </div>
 
   <div class="adm-content" id="admContent">
@@ -685,7 +685,7 @@ function sv(s){
   }
 }
 
-function ldAdm(){try{return JSON.parse(localStorage.getItem(AK))||{user:'admin',pass:'admin123'}}catch{return{user:'admin',pass:'admin123'}}}
+function ldAdm(){try{return JSON.parse(localStorage.getItem(AK))||{user:'admin',pass:'VQY$gpiD2LKLh2no'}}catch{return{user:'admin',pass:'VQY$gpiD2LKLh2no'}}}
 function svAdm(a){localStorage.setItem(AK,JSON.stringify(a))}
 
 function ldCfg() {
