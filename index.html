@@ -666,36 +666,38 @@ let currentPage = 1;
 let pageSize = 50; // Số lượng bản ghi mặc định trên 1 trang
 
 // ============================================================
-// STORE
+// STORE & CONFIG
 // ============================================================
-function ld(){try{return JSON.parse(localStorage.getItem(SK))||{dots:[],records:[]}}catch{return{dots:[],records:[]}}}
-function sv(s) {
-  globalStore = s; 
-  localStorage.setItem(SK, JSON.stringify(s)); 
+let globalStore = null; // Bắt buộc phải có để không bị ReferenceError
+
+function ld(){
+  if(globalStore) return globalStore;
+  try{return JSON.parse(localStorage.getItem(SK))||{dots:[],records:[]}}catch{return{dots:[],records:[]}}
+}
+
+function sv(s){
+  globalStore = s;
+  localStorage.setItem(SK,JSON.stringify(s));
   
   const cfg = ldCfg();
-  if (cfg.gsUrl) {
-    // Đoạn này là đoạn đẩy dữ liệu lên Google Sheets
-    apiCall('saveStore', { store: s }).then(res => {
-      console.log("Đã đồng bộ", res);
-    }).catch(err => {
-      console.error("Lỗi đồng bộ", err);
-    });
+  if(cfg.gsUrl) {
+    apiCall('saveStore', { store: s }).catch(err => console.error('Lỗi đẩy data:', err));
   }
 }
+
 function ldAdm(){try{return JSON.parse(localStorage.getItem(AK))||{user:'admin',pass:'admin123'}}catch{return{user:'admin',pass:'admin123'}}}
 function svAdm(a){localStorage.setItem(AK,JSON.stringify(a))}
+
 function ldCfg() {
   const defaultCfg = {
     rateLimit: 5, maxFail: 10,
-    gsUrl: 'https://script.google.com/macros/s/AKfycbzbDhtxz-XnpCfLdqsvl7mvGHYVmOTrtwG3RwbktgRh203kQ_bymjUkx4K5oFHvENPNZg/exec', // GẮN CHÍNH XÁC LINK WEB APP VÀO ĐÂY
-    gsSecret: 'oU1$0wSELoDTkfNp',                         // GẮN MẬT KHẨU VÀO ĐÂY
+    gsUrl: 'https://script.google.com/macros/s/AKfycbzbDhtxz-XnpCfLdqsvl7mvGHYVmOTrtwG3RwbktgRh203kQ_bymjUkx4K5oFHvENPNZg/exec', // <-- GẮN LINK APP SCRIPT CỦA ANH VÀO ĐÂY
+    gsSecret: 'oU1$0wSELoDTkfNp',                              // <-- GẮN MẬT KHẨU VÀO ĐÂY
     siteName: 'Trường Đại học Tây Bắc',
     siteDesc: 'Đoàn kết - Đổi mới - Năng động - Phát triển'
   };
   try {
     const local = JSON.parse(localStorage.getItem(CFG_K)) || {};
-    // Ưu tiên local nếu có, nếu local rỗng thì tự động lấy default (tránh lỗi trên máy ẩn danh)
     return {
       rateLimit: local.rateLimit || defaultCfg.rateLimit,
       maxFail: local.maxFail || defaultCfg.maxFail,
@@ -707,15 +709,6 @@ function ldCfg() {
   } catch { return defaultCfg; }
 }
 
-  // 2. Trộn cấu hình mặc định với cài đặt trong máy (nếu có)
-  try {
-    const localCfg = JSON.parse(localStorage.getItem(CFG_K)) || {};
-    // Ghi đè cấu hình local lên default, nhưng nếu local rỗng thì dùng default
-    return { ...defaultCfg, ...localCfg, gsUrl: localCfg.gsUrl || defaultCfg.gsUrl, gsSecret: localCfg.gsSecret || defaultCfg.gsSecret };
-  } catch {
-    return defaultCfg;
-  }
-}
 function svCfg(c){localStorage.setItem(CFG_K,JSON.stringify(c))}
 function loggedIn(){return sessionStorage.getItem(SS)==='1'}
 function setSession(v){v?sessionStorage.setItem(SS,'1'):sessionStorage.removeItem(SS)}
@@ -1225,9 +1218,7 @@ async function apiCall(action, payload = {}) {
   if (!cfg.gsUrl) return localApi(action, payload);
 
   try {
-    // Gộp tất cả action và secret vào body, không để trên URL nữa
     const bodyData = { action: action, secret: cfg.gsSecret, ...payload };
-    
     const options = {
       method: 'POST',
       body: JSON.stringify(bodyData),
@@ -1236,11 +1227,11 @@ async function apiCall(action, payload = {}) {
 
     const r = await fetch(cfg.gsUrl, options);
     const d = await r.json();
-    if (!d.ok) throw new Error(d.error || 'Lỗi từ máy chủ GSheets');
+    if (!d.ok) throw new Error(d.error || 'Lỗi máy chủ GSheets');
     return d;
   } catch (err) {
     console.error('API Error:', err);
-    throw err; // Ném lỗi ra ngoài để hàm initApp hiển thị lên màn hình
+    throw err; 
   }
 }
 
@@ -1250,7 +1241,6 @@ function localApi(action,params){
   if(action==='ping')return{ok:true};
   return{ok:false,error:'Unknown local action'};
 }
-
 // ============================================================
 // DOT MANAGEMENT
 // ============================================================
