@@ -686,15 +686,26 @@ function sv(s) {
 function ldAdm(){try{return JSON.parse(localStorage.getItem(AK))||{user:'admin',pass:'admin123'}}catch{return{user:'admin',pass:'admin123'}}}
 function svAdm(a){localStorage.setItem(AK,JSON.stringify(a))}
 function ldCfg() {
-  // 1. Cấu hình mặc định (Gắn cứng Link Apps Script của anh vào đây)
   const defaultCfg = {
-    rateLimit: 5,
-    maxFail: 10,
-    gsUrl: 'https://script.google.com/macros/s/AKfycbyDxvwl7m95Nk_Tful8-ufk5M_OwO5knTWD159cNZ19pVBRRf54e8gnIJBPckFcZ3B92w/exec', // <-- ĐIỀN LINK WEB APP CỦA ANH
-    gsSecret: 'oU1$0wSELoDTkfNp',                         // <-- ĐIỀN SECRET KEY
-    siteName: 'Đại học Tây Bắc',
-    siteDesc: 'Cổng thông tin tuyển sinh'
+    rateLimit: 5, maxFail: 10,
+    gsUrl: 'https://script.google.com/macros/s/AKfycbzbDhtxz-XnpCfLdqsvl7mvGHYVmOTrtwG3RwbktgRh203kQ_bymjUkx4K5oFHvENPNZg/exec', // GẮN CHÍNH XÁC LINK WEB APP VÀO ĐÂY
+    gsSecret: 'oU1$0wSELoDTkfNp',                         // GẮN MẬT KHẨU VÀO ĐÂY
+    siteName: 'Trường Đại học Tây Bắc',
+    siteDesc: 'Đoàn kết - Đổi mới - Năng động - Phát triển'
   };
+  try {
+    const local = JSON.parse(localStorage.getItem(CFG_K)) || {};
+    // Ưu tiên local nếu có, nếu local rỗng thì tự động lấy default (tránh lỗi trên máy ẩn danh)
+    return {
+      rateLimit: local.rateLimit || defaultCfg.rateLimit,
+      maxFail: local.maxFail || defaultCfg.maxFail,
+      gsUrl: (local.gsUrl || '').trim() ? local.gsUrl : defaultCfg.gsUrl,
+      gsSecret: (local.gsSecret || '').trim() ? local.gsSecret : defaultCfg.gsSecret,
+      siteName: (local.siteName || '').trim() ? local.siteName : defaultCfg.siteName,
+      siteDesc: (local.siteDesc || '').trim() ? local.siteDesc : defaultCfg.siteDesc
+    };
+  } catch { return defaultCfg; }
+}
 
   // 2. Trộn cấu hình mặc định với cài đặt trong máy (nếu có)
   try {
@@ -1209,35 +1220,27 @@ async function testGsConnection(){
 // ============================================================
 // BACKEND API (GSheets hoặc localStorage)
 // ============================================================
-async function apiCall(action, payload = null) {
+async function apiCall(action, payload = {}) {
   const cfg = ldCfg();
-  if (!cfg.gsUrl) {
-    return localApi(action, payload);
-  }
+  if (!cfg.gsUrl) return localApi(action, payload);
 
   try {
-    const url = new URL(cfg.gsUrl);
-    url.searchParams.set('action', action);
-    url.searchParams.set('secret', cfg.gsSecret || '');
-
-    const options = { method: 'GET' };
+    // Gộp tất cả action và secret vào body, không để trên URL nữa
+    const bodyData = { action: action, secret: cfg.gsSecret, ...payload };
     
-    // Nếu có payload (như lúc lưu dữ liệu), chuyển sang dùng POST
-    if (payload) {
-      options.method = 'POST';
-      // Apps Script yêu cầu gửi data dưới dạng text cho mode 'no-cors' hoặc plain form
-      // Tuy nhiên chuẩn nhất khi dev Apps Script là dùng text/plain
-      options.body = JSON.stringify(payload);
-      options.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
-    }
+    const options = {
+      method: 'POST',
+      body: JSON.stringify(bodyData),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+    };
 
-    const r = await fetch(url.toString(), options);
+    const r = await fetch(cfg.gsUrl, options);
     const d = await r.json();
-    if (!d.ok) throw new Error(d.error || 'API Error');
+    if (!d.ok) throw new Error(d.error || 'Lỗi từ máy chủ GSheets');
     return d;
   } catch (err) {
-    console.error('GSheets API error:', err);
-    return localApi(action, payload); // Fallback
+    console.error('API Error:', err);
+    throw err; // Ném lỗi ra ngoài để hàm initApp hiển thị lên màn hình
   }
 }
 
@@ -1761,13 +1764,38 @@ document.querySelectorAll('.moverlay').forEach(m=>{
 // ============================================================
 // INIT
 // ============================================================
-(function init(){
-  const cfg=ldCfg();
-  if(cfg.siteName)document.querySelector('.hdr-ttl h1').textContent=cfg.siteName;
-  if(cfg.siteDesc)document.querySelector('.hdr-ttl p').textContent=cfg.siteDesc;
+// ============================================================
+// INIT
+// ============================================================
+async function initApp() {
+  const cfg = ldCfg();
+  if(cfg.siteName) document.querySelector('.hdr-ttl h1').textContent = cfg.siteName;
+  if(cfg.siteDesc) document.querySelector('.hdr-ttl p').textContent = cfg.siteDesc;
+  
+  if (cfg.gsUrl) {
+    document.getElementById('lookupResult').innerHTML = '<div style="text-align:center; padding: 40px; color: var(--g400);">⏳ Đang kết nối dữ liệu máy chủ...</div>';
+    try {
+      const res = await apiCall('getStore');
+      if (res && res.ok && res.data) {
+        globalStore = res.data;
+        localStorage.setItem(SK, JSON.stringify(globalStore)); 
+        document.getElementById('lookupResult').innerHTML = ''; // Thành công thì xoá chữ tải
+      }
+    } catch (e) {
+      // Nếu lỗi, hiển thị thẳng lên màn hình để dễ bắt bệnh
+      document.getElementById('lookupResult').innerHTML = `<div class="msg-box" style="border:1px solid var(--err);"><div class="ico">⚠️</div><h3 style="color:var(--err)">Không thể tải dữ liệu</h3><p>${e.message}</p></div>`;
+    }
+  }
+
   refreshActivePills();
   renderHistory();
-})();
+  if (loggedIn() && document.getElementById('pageAdmin').classList.contains('on')) {
+      renderAdmin();
+  }
+}
+
+// Gọi hàm khởi chạy
+initApp();
 </script>
 </body>
 </html>
