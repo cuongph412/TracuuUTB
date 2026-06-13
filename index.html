@@ -1903,13 +1903,13 @@ async function initApp() {
   }
 }
 // ============================================================
-// SECRET SHORTCUT (Ctrl + Shift + Q để mở Quản trị)
+// SECRET SHORTCUT (Ctrl + Alt + M để mở Quản trị)
 // ============================================================
 document.addEventListener('keydown', function(e) {
-  // Kiểm tra xem người dùng có đang bấm đồng thời Ctrl + Shift + phím Q không
-  if (e.ctrlKey && e.shiftKey && (e.key === 'q' || e.key === 'Q')) {
-    e.preventDefault(); // Ngăn chặn hành vi mặc định của trình duyệt
-    goPage('admin');    // Mở trang quản trị
+  // Dùng e.code để không bị ảnh hưởng bởi Unikey hay CapsLock
+  if (e.ctrlKey && e.altKey && e.code === 'KeyM') {
+    e.preventDefault(); 
+    goPage('admin');    
   }
 });
 // Gọi hàm khởi chạy
