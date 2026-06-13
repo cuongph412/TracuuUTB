@@ -393,24 +393,26 @@ table tr:last-child td{border-bottom:none}
       <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Dữ liệu hồ sơ</h3>
       <div class="frow">
         <input type="text" id="fSearch" placeholder="Tìm CCCD, họ tên, mã TS..." oninput="renderTable()">
-        <select id="fDot" onchange="renderTable()"><option value="">Tất cả đợt</option></select>
+        <select id="fDot" onchange="onDotFilterChange()"><option value="">Tất cả đợt</option></select>
         <button class="adv-toggle" onclick="toggleAdvSearch()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
           <span id="advToggleTxt">Bộ lọc nâng cao</span>
         </button>
       </div>
+      
       <div id="advSearch" style="display:none">
-        <div class="adv-grid">
-          <div>
-            <label>Kết quả</label>
-            <select id="fKetQua" onchange="renderTable()">
-              <option value="">Tất cả</option>
-              <option value="trúng">Trúng tuyển</option>
-              <option value="không">Không trúng</option>
-              <option value="chờ">Đang chờ</option>
-            </select>
-          </div>
-          <div>
+        <div class="adv-grid" id="advFilterContainer"></div>
+        
+        <div style="display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap">
+          <button class="btn btn-out btn-sm" onclick="clearAdvSearch()">Xoá bộ lọc</button>
+          <button class="btn btn-green btn-sm" onclick="exportTable()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Xuất Excel kết quả lọc
+          </button>
+          <button class="btn btn-red btn-sm" onclick="clearDotRecords()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Xoá đợt được chọn
+          </button>
+        </div>
+      </div>
             <label>Ngành</label>
             <input type="text" id="fNganh" placeholder="Lọc theo ngành..." oninput="renderTable()">
           </div>
@@ -1436,10 +1438,13 @@ function deleteField(dotId,fId){
 let rawRows=[],excelHeaders=[],mappingResult={};
 
 function renderSelects(){
-  const s=ld();
-  const opts=s.dots.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');
-  document.getElementById('importDotSel').innerHTML='<option value="">-- Chọn đợt --</option>'+opts;
-  document.getElementById('fDot').innerHTML='<option value="">Tất cả đợt</option>'+opts;
+  const s = ld();
+  const opts = s.dots.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+  document.getElementById('importDotSel').innerHTML = '<option value="">-- Chọn đợt --</option>' + opts;
+  document.getElementById('fDot').innerHTML = '<option value="">Tất cả đợt</option>' + opts;
+  
+  // Khởi tạo bộ lọc nâng cao
+  renderAdvFilters();
 }
 
 function getDotFields(dotId){const s=ld();const dot=s.dots.find(d=>d.id===dotId);return(dot&&dot.fields)?dot.fields:DEFAULT_FIELDS()}
@@ -1567,56 +1572,170 @@ function downloadTemplate(){
 // ============================================================
 // DATA TABLE (Advanced Search)
 // ============================================================
-let advOpen=false;
-function toggleAdvSearch(){
-  advOpen=!advOpen;
-  document.getElementById('advSearch').style.display=advOpen?'':'none';
-  document.getElementById('advToggleTxt').textContent=advOpen?'Ẩn bộ lọc':'Bộ lọc nâng cao';
+let advOpen = false;
+
+function toggleAdvSearch() {
+  advOpen = !advOpen;
+  document.getElementById('advSearch').style.display = advOpen ? '' : 'none';
+  document.getElementById('advToggleTxt').textContent = advOpen ? 'Ẩn bộ lọc' : 'Bộ lọc nâng cao';
+  if (!advOpen) clearAdvSearch();
 }
-function clearAdvSearch(){
-  document.getElementById('fKetQua').value='';
-  document.getElementById('fNganh').value='';
-  document.getElementById('fPT').value='';
-  document.getElementById('fDiemMin').value='';
-  document.getElementById('fDiemMax').value='';
+
+function clearAdvSearch() {
+  document.querySelectorAll('.dyn-filter').forEach(el => el.value = '');
+  if (typeof currentPage !== 'undefined') currentPage = 1;
   renderTable();
 }
 
-function getFilteredRecords(){
-  const s=ld();
-  const q=normStr(document.getElementById('fSearch').value);
-  const dotF=document.getElementById('fDot').value;
-  const kq=normStr(document.getElementById('fKetQua')?.value||'');
-  const nganh=normStr(document.getElementById('fNganh')?.value||'');
-  const pt=normStr(document.getElementById('fPT')?.value||'');
-  const dMin=parseFloat(document.getElementById('fDiemMin')?.value||'');
-  const dMax=parseFloat(document.getElementById('fDiemMax')?.value||'');
+// Hàm mới: Xử lý khi người dùng đổi Đợt
+function onDotFilterChange() {
+  renderAdvFilters(); // Vẽ lại ô lọc
+  clearAdvSearch();   // Xoá điều kiện lọc của đợt cũ
+}
 
-  return s.records.filter(r=>{
-    if(dotF&&r.dotId!==dotF)return false;
-    if(q&&!normStr(r.HoTen).includes(q)&&!normStr(r.CCCD).includes(q)&&!normStr(r.MaTS||'').includes(q))return false;
-    if(kq&&!normStr(r.KetQua||'').includes(kq))return false;
-    if(nganh&&!normStr(r.Nganh||'').includes(nganh))return false;
-    if(pt&&!normStr(r.PhuongThuc||'').includes(pt))return false;
-    if(!isNaN(dMin)&&dMin>0){const d=parseFloat(r.DiemXT||'');if(isNaN(d)||d<dMin)return false}
-    if(!isNaN(dMax)&&dMax>0){const d=parseFloat(r.DiemXT||'');if(isNaN(d)||d>dMax)return false}
+// Hàm mới: Tự động quét và vẽ ô lọc dựa trên Cấu hình trường
+function renderAdvFilters() {
+  const s = ld();
+  const dotId = document.getElementById('fDot').value;
+  let fieldsToFilter = [];
+
+  if (dotId) {
+    // Lấy trường của đợt cụ thể
+    const dot = s.dots.find(d => d.id === dotId);
+    if (dot && dot.fields) fieldsToFilter = dot.fields;
+  } else {
+    // Nếu chọn "Tất cả đợt", gộp tất cả các trường đang có trong hệ thống
+    const fieldMap = {};
+    s.dots.forEach(d => {
+      (d.fields || []).forEach(f => { if (!fieldMap[f.key]) fieldMap[f.key] = f; });
+    });
+    fieldsToFilter = Object.values(fieldMap);
+  }
+
+  // Bỏ qua các trường đã có ở ô tìm kiếm chính
+  const excludeKeys = ['CCCD', 'HoTen', 'NgaySinh', 'ThongBao', 'MaTS'];
+  fieldsToFilter = fieldsToFilter.filter(f => !excludeKeys.includes(f.key));
+
+  let html = '';
+  fieldsToFilter.forEach(f => {
+    // Thông minh: Tự động nhận diện trường có chữ "Diem" để hiện bộ lọc Từ - Đến
+    if (f.key.toLowerCase().includes('diem')) {
+      html += `
+        <div>
+          <label>${esc(f.label)} (Từ)</label>
+          <input type="number" class="dyn-filter" data-key="${f.key}" data-op="min" placeholder="0" step="0.1" oninput="renderTable()">
+        </div>
+        <div>
+          <label>${esc(f.label)} (Đến)</label>
+          <input type="number" class="dyn-filter" data-key="${f.key}" data-op="max" placeholder="100" step="0.1" oninput="renderTable()">
+        </div>
+      `;
+    } else {
+      // Các trường khác dùng tìm kiếm chứa (includes)
+      html += `
+        <div>
+          <label>${esc(f.label)}</label>
+          <input type="text" class="dyn-filter" data-key="${f.key}" data-op="includes" placeholder="Lọc ${esc(f.label).toLowerCase()}..." oninput="renderTable()">
+        </div>
+      `;
+    }
+  });
+
+  document.getElementById('advFilterContainer').innerHTML = html || '<div style="grid-column:1/-1;font-size:12px;color:var(--g400)">Không có trường dữ liệu phụ để lọc.</div>';
+}
+
+function getFilteredRecords() {
+  const s = ld();
+  const q = normStr(document.getElementById('fSearch').value);
+  const dotF = document.getElementById('fDot').value;
+
+  // Thu thập tất cả giá trị từ các ô lọc động đang có
+  const dynFilters = Array.from(document.querySelectorAll('.dyn-filter')).map(input => ({
+    key: input.dataset.key,
+    op: input.dataset.op,
+    val: input.type === 'number' ? parseFloat(input.value) : normStr(input.value)
+  })).filter(f => (typeof f.val === 'number' && !isNaN(f.val)) || (typeof f.val === 'string' && f.val !== ''));
+
+  return s.records.filter(r => {
+    if (dotF && r.dotId !== dotF) return false;
+    if (q && !normStr(r.HoTen).includes(q) && !normStr(r.CCCD).includes(q) && !normStr(r.MaTS || '').includes(q)) return false;
+    
+    // Kiểm tra từng điều kiện lọc động
+    for (let filter of dynFilters) {
+      const recVal = r[filter.key];
+      if (filter.op === 'includes') {
+        if (!normStr(recVal).includes(filter.val)) return false;
+      } else if (filter.op === 'min' || filter.op === 'max') {
+        // Xử lý dấu phẩy thập phân nếu nhập từ Excel
+        const numVal = parseFloat(String(recVal || '').replace(',', '.'));
+        if (filter.op === 'min' && (isNaN(numVal) || numVal < filter.val)) return false;
+        if (filter.op === 'max' && (isNaN(numVal) || numVal > filter.val)) return false;
+      }
+    }
     return true;
   });
 }
 
-function renderTable(){
+function renderTable() {
   const s = ld();
   const recs = getFilteredRecords();
-  const dotMap = {}; 
-  s.dots.forEach(d => dotMap[d.id] = d);
-  
+  const dotMap = {}; s.dots.forEach(d => dotMap[d.id] = d);
   const statsEl = document.getElementById('tableStats');
   
-  if(!recs.length){
+  if (!recs.length) {
     statsEl.textContent = 'Không có hồ sơ nào phù hợp';
     document.getElementById('dataTable').innerHTML = '<div class="empty"><div class="ico">📂</div>Không có hồ sơ nào phù hợp</div>';
     return;
   }
+
+  // Logic phân trang giữ nguyên
+  const totalPages = Math.ceil(recs.length / pageSize) || 1;
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * pageSize;
+  const end = start + pageSize;
+  const pageData = recs.slice(start, end);
+
+  statsEl.innerHTML = `Hiển thị <strong>${start + 1}-${Math.min(end, recs.length)}</strong> / tổng số <strong>${recs.length}</strong> hồ sơ`;
+
+  let tbl = `<table><thead><tr><th>#</th><th>CCCD</th><th>Họ tên</th><th>Ngày sinh</th><th>Ngành</th><th>Điểm</th><th>Kết quả</th><th>Đợt</th></tr></thead><tbody>`;
+  
+  pageData.forEach((r, i) => {
+    const dot = dotMap[r.dotId];
+    const dotColor = dot?.color || 'var(--navy)';
+    tbl += `<tr>
+      <td style="color:var(--g400)">${start + i + 1}</td>
+      <td>${esc(r.CCCD || '—')}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.HoTen || '')}</td>
+      <td>${fmtDOB(r.NgaySinh)}</td>
+      <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.Nganh || '—')}</td>
+      <td>${esc(r.DiemXT || '—')}</td>
+      <td>${esc(r.KetQua || '—')}</td>
+      <td style="font-size:10px"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dotColor};margin-right:3px"></span>${esc(dot?.name || r.dotId)}</td>
+    </tr>`;
+  });
+  tbl += '</tbody></table>';
+
+  tbl += `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding: 10px; background: #fff; border-top: 1px solid var(--g100); flex-wrap: wrap; gap: 10px;">
+      <div style="font-size: 12px; color: var(--g600);">
+        Hiển thị 
+        <select onchange="changePageSize(this.value)" style="padding: 4px; border: 1px solid var(--g200); border-radius: 4px; outline: none;">
+          <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
+          <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+          <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+          <option value="200" ${pageSize === 200 ? 'selected' : ''}>200</option>
+        </select> dòng / trang
+      </div>
+      <div style="display:flex; gap: 5px; align-items:center;">
+        <button class="btn btn-out btn-xs" onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>&laquo; Trước</button>
+        <span style="font-size: 12px; font-weight: 600; padding: 0 8px;">Trang ${currentPage} / ${totalPages}</span>
+        <button class="btn btn-out btn-xs" onclick="changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>Sau &raquo;</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('dataTable').innerHTML = tbl;
+}
 
   // Tính toán phân trang
   const totalPages = Math.ceil(recs.length / pageSize) || 1;
